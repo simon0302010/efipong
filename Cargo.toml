@@ -1,0 +1,15 @@
+[package]
+name = "efipong"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+uefi = { version = "0.36", features = ["logger", "panic_handler", "alloc", "global_allocator"] }
+embedded-graphics = "0.8"
+embedded-graphics-core = "0.4"
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
