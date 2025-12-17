@@ -2,12 +2,15 @@
 #![no_std]
 
 extern crate alloc;
+extern crate libm;
+extern crate num_traits;
 
 mod buffer;
 mod misc;
 
 use core::time::Duration;
 
+use num_traits::float::FloatCore;
 use uefi::proto::console::gop::{BltPixel, GraphicsOutput};
 use uefi::proto::console::text::{Key, ScanCode};
 use uefi::{boot, Result};
@@ -15,6 +18,8 @@ use uefi::{prelude::*, Char16};
 
 use crate::buffer::Buffer;
 use crate::misc::{rectangles_overlapping, Rectangle};
+use core::f64;
+use libm::{cos, sin, sqrt};
 
 #[derive(Clone, Copy)]
 struct Ball {
@@ -37,6 +42,7 @@ const PADDLE_HEIGHT: usize = 80;
 const PADDLE_WIDTH: usize = 6;
 const PADDLE_SPEED: f64 = 40.0;
 const PADDLE_DISTANCE_WALL: usize = 20;
+const BOUNCE_ANGLE: f64 = 5.0 * core::f64::consts::PI / 12.0;
 
 const WHITE: BltPixel = BltPixel::new(255, 255, 255);
 
@@ -167,5 +173,14 @@ fn handle_paddle_hit(ball: &mut Ball, paddle: &Paddle) {
         // inversing direction
         ball.speed_x = -ball.speed_x;
         ball.x = paddle.x - ball.size as f64;
+
+        let paddle_center = paddle.y + (paddle.height as f64 / 2.0);
+        let ball_center = ball.y + (ball.size as f64 / 2.0);
+        let hit_y = ((ball_center - paddle_center) / (paddle.height as f64 / 2.0)).clamp(-1.0, 1.0);
+
+        // calculate new direction and speed
+        let ball_speed = sqrt(ball.speed_x.powi(2) + ball.speed_y.powi(2));
+        ball.speed_x = -ball_speed * cos(BOUNCE_ANGLE * hit_y);
+        ball.speed_y = ball_speed * sin(BOUNCE_ANGLE * hit_y);
     }
 }

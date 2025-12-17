@@ -44,6 +44,8 @@ version = "0.1.0"
 dependencies = [
  "embedded-graphics",
  "embedded-graphics-core",
+ "libm",
+ "num-traits",
  "uefi",
 ]
 
@@ -78,6 +80,12 @@ checksum = "98de4bbd547a563b716d8dfa9aad1cb19bfab00f4fa09a6a4ed21dbcf44ce9c4"
 dependencies = [
  "num-traits",
 ]
+
+[[package]]
+name = "libm"
+version = "0.2.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f9fbbcab51052fe104eb5e5d351cf728d30a5be1fe14d9be8a3b097481fb97de"
 
 [[package]]
 name = "log"
