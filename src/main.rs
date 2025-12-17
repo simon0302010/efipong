@@ -4,6 +4,7 @@
 extern crate alloc;
 
 mod buffer;
+mod misc;
 
 use core::time::Duration;
 
@@ -13,6 +14,7 @@ use uefi::{boot, Result};
 use uefi::{prelude::*, Char16};
 
 use crate::buffer::Buffer;
+use crate::misc::{rectangles_overlapping, Rectangle};
 
 #[derive(Clone, Copy)]
 struct Ball {
@@ -20,13 +22,14 @@ struct Ball {
     y: f64,
     speed_x: f64,
     speed_y: f64,
-    size: usize
+    size: usize,
 }
 
 struct Paddle {
+    x: f64,
     y: f64,
     height: usize,
-    width: usize
+    width: usize,
 }
 
 const BALL_SIZE: usize = 7;
@@ -51,13 +54,14 @@ fn game() -> Result {
         y: ((height / 2) - (BALL_SIZE / 2)) as f64,
         speed_x: 4.0,
         speed_y: 4.0,
-        size: 7
+        size: 7,
     };
 
     let mut paddle = Paddle {
+        x: (width - PADDLE_WIDTH - PADDLE_DISTANCE_WALL) as f64,
         y: ((height / 2) - (PADDLE_HEIGHT / 2)) as f64,
         height: PADDLE_HEIGHT,
-        width: PADDLE_WIDTH
+        width: PADDLE_WIDTH,
     };
 
     while running {
@@ -71,10 +75,12 @@ fn game() -> Result {
                     }
                 }
                 Key::Special(ScanCode::UP) => {
-                    paddle.y = (paddle.y - PADDLE_SPEED).clamp(0.0, (height - PADDLE_HEIGHT) as f64);
+                    paddle.y =
+                        (paddle.y - PADDLE_SPEED).clamp(0.0, (height - PADDLE_HEIGHT) as f64);
                 }
                 Key::Special(ScanCode::DOWN) => {
-                    paddle.y = (paddle.y + PADDLE_SPEED).clamp(0.0, (height - PADDLE_HEIGHT) as f64);
+                    paddle.y =
+                        (paddle.y + PADDLE_SPEED).clamp(0.0, (height - PADDLE_HEIGHT) as f64);
                 }
                 _ => {}
             }
@@ -101,6 +107,9 @@ fn game() -> Result {
             ball.speed_y = -ball.speed_y;
         }
 
+        // handling ball paddle collisions
+        handle_paddle_hit(&mut ball, &paddle);
+
         // clearing buffer
         buffer.clear();
 
@@ -116,8 +125,13 @@ fn game() -> Result {
 
         // rendering paddle
         buffer.rectangle(
-            width - PADDLE_WIDTH - PADDLE_DISTANCE_WALL,
-            paddle.y as usize, paddle.width, paddle.height, WHITE, true);
+            paddle.x as usize,
+            paddle.y as usize,
+            paddle.width,
+            paddle.height,
+            WHITE,
+            true,
+        );
 
         // draw buffer to screen
         let _ = buffer.blit(&mut gop);
@@ -133,4 +147,25 @@ fn main() -> Status {
     uefi::helpers::init().unwrap();
     game().unwrap();
     Status::SUCCESS
+}
+
+fn handle_paddle_hit(ball: &mut Ball, paddle: &Paddle) {
+    if rectangles_overlapping(
+        Rectangle {
+            x: ball.x as usize,
+            y: ball.y as usize,
+            width: ball.size,
+            height: ball.size,
+        },
+        Rectangle {
+            x: paddle.x as usize,
+            y: paddle.y as usize,
+            width: paddle.width,
+            height: paddle.height,
+        },
+    ) {
+        // inversing direction
+        ball.speed_x = -ball.speed_x;
+        ball.x = paddle.x - ball.size as f64;
+    }
 }
