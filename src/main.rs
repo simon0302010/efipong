@@ -15,10 +15,15 @@ use uefi::{prelude::*, Char16};
 use crate::buffer::Buffer;
 
 #[derive(Clone, Copy)]
-pub struct Vec2 {
-    pub x: isize,
-    pub y: isize,
+struct Ball {
+    x: f64,
+    y: f64,
+    speed_x: f64,
+    speed_y: f64,
+    size: usize
 }
+
+const BALL_SIZE: usize = 7;
 
 fn game() -> Result {
     let gop_handle = boot::get_handle_for_protocol::<GraphicsOutput>()?;
@@ -27,10 +32,15 @@ fn game() -> Result {
     let (width, height) = gop.current_mode_info().resolution();
     let mut buffer = Buffer::new(width, height);
 
-    let rec_w = 50;
-    let rec_h = 30;
-
     let mut running = true;
+
+    let mut ball = Ball {
+        x: ((width / 2) - (BALL_SIZE / 2)) as f64,
+        y: ((height / 2) - (BALL_SIZE / 2)) as f64,
+        speed_x: 5.0,
+        speed_y: 5.0,
+        size: 7
+    };
 
     while running {
         while let Ok(Some(key)) = system::with_stdin(|stdin| stdin.read_key()) {
@@ -46,18 +56,38 @@ fn game() -> Result {
             }
         }
 
-        buffer.clear();
+        ball.x += ball.speed_x;
+        ball.y += ball.speed_y;
+
+        if ball.x >= width as f64 - ball.size as f64 {
+            ball.x = width as f64 - ball.size as f64;
+            ball.speed_x = -ball.speed_x;
+        } else if ball.x <= 0.0 {
+            ball.x = 0.0;
+            ball.speed_x = -ball.speed_x;
+        }
+
+        // Vertical collision detection and response
+        if ball.y >= height as f64 - ball.size as f64 {
+            ball.y = height as f64 - ball.size as f64;
+            ball.speed_y = -ball.speed_y;
+        } else if ball.y <= 0.0 {
+            ball.y = 0.0;
+            ball.speed_y = -ball.speed_y;
+        }
+
+        //buffer.clear();
         buffer.rectangle(
-            (width / 2) - (rec_w / 2),
-            (height / 2) - (rec_h / 2),
-            rec_w,
-            rec_h,
-            BltPixel::new(255, 0, 0),
-            false,
+            ball.x as usize,
+            ball.y as usize,
+            ball.size,
+            ball.size,
+            BltPixel::new(255, 255, 255),
+            true,
         );
         let _ = buffer.blit(&mut gop);
 
-        boot::stall(Duration::from_millis(16));
+        boot::stall(Duration::from_millis(0));
     }
 
     Ok(())
