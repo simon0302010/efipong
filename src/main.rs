@@ -30,7 +30,7 @@ struct Paddle {
 }
 
 const BALL_SIZE: usize = 7;
-const PADDLE_HEIGHT: usize = 40;
+const PADDLE_HEIGHT: usize = 80;
 const PADDLE_WIDTH: usize = 6;
 const PADDLE_SPEED: f64 = 40.0;
 const PADDLE_DISTANCE_WALL: usize = 20;
@@ -49,8 +49,8 @@ fn game() -> Result {
     let mut ball = Ball {
         x: ((width / 2) - (BALL_SIZE / 2)) as f64,
         y: ((height / 2) - (BALL_SIZE / 2)) as f64,
-        speed_x: 8.0,
-        speed_y: 8.0,
+        speed_x: 4.0,
+        speed_y: 4.0,
         size: 7
     };
 
@@ -71,10 +71,10 @@ fn game() -> Result {
                     }
                 }
                 Key::Special(ScanCode::UP) => {
-                    paddle.y -= 40.0;
+                    paddle.y = (paddle.y - PADDLE_SPEED).clamp(0.0, (height - PADDLE_HEIGHT) as f64);
                 }
                 Key::Special(ScanCode::DOWN) => {
-                    paddle.y += 40.0;
+                    paddle.y = (paddle.y + PADDLE_SPEED).clamp(0.0, (height - PADDLE_HEIGHT) as f64);
                 }
                 _ => {}
             }
