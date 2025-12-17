@@ -8,7 +8,7 @@ mod buffer;
 use core::time::Duration;
 
 use uefi::proto::console::gop::{BltPixel, GraphicsOutput};
-use uefi::proto::console::text::Key;
+use uefi::proto::console::text::{Key, ScanCode};
 use uefi::{boot, Result};
 use uefi::{prelude::*, Char16};
 
@@ -23,7 +23,19 @@ struct Ball {
     size: usize
 }
 
+struct Paddle {
+    y: f64,
+    height: usize,
+    width: usize
+}
+
 const BALL_SIZE: usize = 7;
+const PADDLE_HEIGHT: usize = 40;
+const PADDLE_WIDTH: usize = 6;
+const PADDLE_SPEED: f64 = 40.0;
+const PADDLE_DISTANCE_WALL: usize = 20;
+
+const WHITE: BltPixel = BltPixel::new(255, 255, 255);
 
 fn game() -> Result {
     let gop_handle = boot::get_handle_for_protocol::<GraphicsOutput>()?;
@@ -37,9 +49,15 @@ fn game() -> Result {
     let mut ball = Ball {
         x: ((width / 2) - (BALL_SIZE / 2)) as f64,
         y: ((height / 2) - (BALL_SIZE / 2)) as f64,
-        speed_x: 5.0,
-        speed_y: 5.0,
+        speed_x: 8.0,
+        speed_y: 8.0,
         size: 7
+    };
+
+    let mut paddle = Paddle {
+        y: ((height / 2) - (PADDLE_HEIGHT / 2)) as f64,
+        height: PADDLE_HEIGHT,
+        width: PADDLE_WIDTH
     };
 
     while running {
@@ -52,10 +70,17 @@ fn game() -> Result {
                         running = false;
                     }
                 }
+                Key::Special(ScanCode::UP) => {
+                    paddle.y -= 40.0;
+                }
+                Key::Special(ScanCode::DOWN) => {
+                    paddle.y += 40.0;
+                }
                 _ => {}
             }
         }
 
+        // moving
         ball.x += ball.speed_x;
         ball.y += ball.speed_y;
 
@@ -76,18 +101,28 @@ fn game() -> Result {
             ball.speed_y = -ball.speed_y;
         }
 
-        //buffer.clear();
+        // clearing buffer
+        buffer.clear();
+
+        // rendering ball
         buffer.rectangle(
             ball.x as usize,
             ball.y as usize,
             ball.size,
             ball.size,
-            BltPixel::new(255, 255, 255),
+            WHITE,
             true,
         );
+
+        // rendering paddle
+        buffer.rectangle(
+            width - PADDLE_WIDTH - PADDLE_DISTANCE_WALL,
+            paddle.y as usize, paddle.width, paddle.height, WHITE, true);
+
+        // draw buffer to screen
         let _ = buffer.blit(&mut gop);
 
-        boot::stall(Duration::from_millis(0));
+        boot::stall(Duration::from_millis(10));
     }
 
     Ok(())
