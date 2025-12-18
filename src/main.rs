@@ -7,6 +7,7 @@ extern crate num_traits;
 
 mod buffer;
 mod misc;
+mod rand;
 
 use core::time::Duration;
 
@@ -19,6 +20,7 @@ use uefi::{boot, Result};
 
 use crate::buffer::Buffer;
 use crate::misc::{rectangles_overlapping, Rectangle};
+use crate::rand::Rng;
 use core::f64;
 use libm::{cos, sin, sqrt};
 
@@ -37,13 +39,16 @@ struct Paddle {
     y: f64,
     height: usize,
     width: usize,
+    score: usize,
 }
 
 const BALL_SIZE: usize = 7;
+const BALL_START_SPEED: f64 = 3.0;
+const MAX_BALL_SPEED: f64 = 7.0;
 const PADDLE_HEIGHT: usize = 80;
 const PADDLE_WIDTH: usize = 6;
 const PADDLE_SPEED: f64 = 40.0;
-const PADDLE_DISTANCE_WALL: usize = 20;
+const PADDLE_DISTANCE_WALL: usize = 30;
 const BOUNCE_ANGLE: f64 = 5.0 * core::f64::consts::PI / 12.0;
 
 const WHITE: BltPixel = BltPixel::new(255, 255, 255);
@@ -57,11 +62,18 @@ fn game() -> Result {
 
     let mut running = true;
 
+    // rng for ball direction after scoring
+    let mut rng = Rng::new();
+
     let mut ball = Ball {
         x: ((width / 2) - (BALL_SIZE / 2)) as f64,
         y: ((height / 2) - (BALL_SIZE / 2)) as f64,
-        speed_x: 4.0,
-        speed_y: 4.0,
+        speed_x: if rng.random_bool(0.5) {
+            BALL_START_SPEED
+        } else {
+            -BALL_START_SPEED
+        },
+        speed_y: 0.0,
         size: 7,
     };
 
@@ -70,6 +82,7 @@ fn game() -> Result {
         y: ((height / 2) - (PADDLE_HEIGHT / 2)) as f64,
         height: PADDLE_HEIGHT,
         width: PADDLE_WIDTH,
+        score: 0,
     };
 
     let mut paddle_l = Paddle {
@@ -77,6 +90,7 @@ fn game() -> Result {
         y: ((height / 2) - (PADDLE_HEIGHT / 2)) as f64,
         height: PADDLE_HEIGHT,
         width: PADDLE_WIDTH,
+        score: 0,
     };
 
     while running {
@@ -115,11 +129,17 @@ fn game() -> Result {
         ball.y += ball.speed_y;
 
         if ball.x >= width as f64 - ball.size as f64 {
-            ball.x = width as f64 - ball.size as f64;
-            ball.speed_x = -ball.speed_x;
+            ball.x = (width / 2 - ball.size / 2) as f64;
+            ball.y = paddle_r.y + (paddle_r.height / 2) as f64 - (ball.size / 2) as f64;
+            ball.speed_x = BALL_START_SPEED;
+            ball.speed_y = rng.random_range(-BALL_START_SPEED, BALL_START_SPEED);
+            paddle_l.score += 1;
         } else if ball.x <= 0.0 {
-            ball.x = 0.0;
-            ball.speed_x = -ball.speed_x;
+            ball.x = (width / 2 - ball.size / 2) as f64;
+            ball.y = paddle_l.y + (paddle_l.height / 2) as f64 - (ball.size / 2) as f64;
+            ball.speed_x = -BALL_START_SPEED;
+            ball.speed_y = rng.random_range(-BALL_START_SPEED, BALL_START_SPEED);
+            paddle_r.score += 1;
         }
 
         // Vertical collision detection and response
@@ -211,7 +231,10 @@ fn handle_paddle_hit(ball: &mut Ball, paddle: &Paddle) {
         let hit_y = ((ball_center - paddle_center) / (paddle.height as f64 / 2.0)).clamp(-1.0, 1.0);
 
         // calculate new direction and speed
-        let ball_speed = sqrt(ball.speed_x.powi(2) + ball.speed_y.powi(2));
+        // Increase ball speed by 5% each hit, cap at 7.0
+        let mut ball_speed = sqrt(ball.speed_x.powi(2) + ball.speed_y.powi(2));
+        ball_speed = (ball_speed * 1.1).min(MAX_BALL_SPEED);
+
         match hit {
             Hit::Right => {
                 ball.speed_x = -ball_speed * cos(BOUNCE_ANGLE * hit_y);
