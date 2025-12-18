@@ -10,11 +10,12 @@ mod misc;
 
 use core::time::Duration;
 
+use alloc::vec;
 use num_traits::float::FloatCore;
+use uefi::prelude::*;
 use uefi::proto::console::gop::{BltPixel, GraphicsOutput};
 use uefi::proto::console::text::{Key, ScanCode};
 use uefi::{boot, Result};
-use uefi::{prelude::*, Char16};
 
 use crate::buffer::Buffer;
 use crate::misc::{rectangles_overlapping, Rectangle};
@@ -30,6 +31,7 @@ struct Ball {
     size: usize,
 }
 
+#[derive(Clone, Copy)]
 struct Paddle {
     x: f64,
     y: f64,
@@ -63,8 +65,15 @@ fn game() -> Result {
         size: 7,
     };
 
-    let mut paddle = Paddle {
+    let mut paddle_r = Paddle {
         x: (width - PADDLE_WIDTH - PADDLE_DISTANCE_WALL) as f64,
+        y: ((height / 2) - (PADDLE_HEIGHT / 2)) as f64,
+        height: PADDLE_HEIGHT,
+        width: PADDLE_WIDTH,
+    };
+
+    let mut paddle_l = Paddle {
+        x: PADDLE_DISTANCE_WALL as f64,
         y: ((height / 2) - (PADDLE_HEIGHT / 2)) as f64,
         height: PADDLE_HEIGHT,
         width: PADDLE_WIDTH,
@@ -74,19 +83,28 @@ fn game() -> Result {
         while let Ok(Some(key)) = system::with_stdin(|stdin| stdin.read_key()) {
             match key {
                 Key::Printable(c) => {
-                    if c == Char16::try_from('q').unwrap_or_default()
-                        || c == Char16::try_from('Q').unwrap_or_default()
-                    {
-                        running = false;
+                    match char::try_from(c).ok().map(|ch| ch.to_ascii_lowercase()) {
+                        Some('q') => {
+                            running = false;
+                        }
+                        Some('w') => {
+                            paddle_l.y = (paddle_l.y - PADDLE_SPEED)
+                                .clamp(0.0, (height - PADDLE_HEIGHT) as f64);
+                        }
+                        Some('s') => {
+                            paddle_l.y = (paddle_l.y + PADDLE_SPEED)
+                                .clamp(0.0, (height - PADDLE_HEIGHT) as f64);
+                        }
+                        _ => {}
                     }
                 }
                 Key::Special(ScanCode::UP) => {
-                    paddle.y =
-                        (paddle.y - PADDLE_SPEED).clamp(0.0, (height - PADDLE_HEIGHT) as f64);
+                    paddle_r.y =
+                        (paddle_r.y - PADDLE_SPEED).clamp(0.0, (height - PADDLE_HEIGHT) as f64);
                 }
                 Key::Special(ScanCode::DOWN) => {
-                    paddle.y =
-                        (paddle.y + PADDLE_SPEED).clamp(0.0, (height - PADDLE_HEIGHT) as f64);
+                    paddle_r.y =
+                        (paddle_r.y + PADDLE_SPEED).clamp(0.0, (height - PADDLE_HEIGHT) as f64);
                 }
                 _ => {}
             }
@@ -114,7 +132,8 @@ fn game() -> Result {
         }
 
         // handling ball paddle collisions
-        handle_paddle_hit(&mut ball, &paddle);
+        handle_paddle_hit(&mut ball, &paddle_r);
+        handle_paddle_hit(&mut ball, &paddle_l);
 
         // clearing buffer
         buffer.clear();
@@ -129,15 +148,17 @@ fn game() -> Result {
             true,
         );
 
-        // rendering paddle
-        buffer.rectangle(
-            paddle.x as usize,
-            paddle.y as usize,
-            paddle.width,
-            paddle.height,
-            WHITE,
-            true,
-        );
+        // rendering paddles
+        for paddle in vec![paddle_l, paddle_r] {
+            buffer.rectangle(
+                paddle.x as usize,
+                paddle.y as usize,
+                paddle.width,
+                paddle.height,
+                WHITE,
+                true,
+            );
+        }
 
         // draw buffer to screen
         let _ = buffer.blit(&mut gop);
@@ -172,7 +193,18 @@ fn handle_paddle_hit(ball: &mut Ball, paddle: &Paddle) {
     ) {
         // inversing direction
         ball.speed_x = -ball.speed_x;
-        ball.x = paddle.x - ball.size as f64;
+        // snap to paddle
+        let hit: Hit;
+
+        if ball.x > paddle.x {
+            // left paddle
+            ball.x = paddle.x + paddle.width as f64;
+            hit = Hit::Left;
+        } else {
+            // right paddle
+            ball.x = paddle.x - ball.size as f64;
+            hit = Hit::Right;
+        }
 
         let paddle_center = paddle.y + (paddle.height as f64 / 2.0);
         let ball_center = ball.y + (ball.size as f64 / 2.0);
@@ -180,7 +212,19 @@ fn handle_paddle_hit(ball: &mut Ball, paddle: &Paddle) {
 
         // calculate new direction and speed
         let ball_speed = sqrt(ball.speed_x.powi(2) + ball.speed_y.powi(2));
-        ball.speed_x = -ball_speed * cos(BOUNCE_ANGLE * hit_y);
+        match hit {
+            Hit::Right => {
+                ball.speed_x = -ball_speed * cos(BOUNCE_ANGLE * hit_y);
+            }
+            Hit::Left => {
+                ball.speed_x = -(-ball_speed * cos(BOUNCE_ANGLE * hit_y));
+            }
+        }
         ball.speed_y = ball_speed * sin(BOUNCE_ANGLE * hit_y);
     }
+}
+
+enum Hit {
+    Left,
+    Right,
 }
