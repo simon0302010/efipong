@@ -11,9 +11,15 @@ mod rand;
 
 use core::time::Duration;
 
-use alloc::vec;
+use alloc::{format, vec};
+use embedded_graphics::mono_font::MonoTextStyle;
+use embedded_graphics::mono_font::ascii::FONT_10X20;
+use embedded_graphics::pixelcolor::Rgb888;
+use embedded_graphics::prelude::Point;
+use embedded_graphics::text::Text;
+use embedded_graphics::Drawable;
 use num_traits::float::FloatCore;
-use uefi::prelude::*;
+use uefi::{prelude::*, println};
 use uefi::proto::console::gop::{BltPixel, GraphicsOutput};
 use uefi::proto::console::text::{Key, ScanCode};
 use uefi::{boot, Result};
@@ -128,6 +134,7 @@ fn game() -> Result {
         ball.x += ball.speed_x;
         ball.y += ball.speed_y;
 
+        // when a "goal" is scored
         if ball.x >= width as f64 - ball.size as f64 {
             ball.x = (width / 2 - ball.size / 2) as f64;
             ball.y = paddle_r.y + (paddle_r.height / 2) as f64 - (ball.size / 2) as f64;
@@ -179,6 +186,13 @@ fn game() -> Result {
                 true,
             );
         }
+
+        let _ = Text::new(
+            format!("{} | {}", paddle_l.score, paddle_r.score).as_str(),
+            Point::new((width / 2 - 50) as i32, 20),
+            MonoTextStyle::new(&FONT_10X20, Rgb888::new(255, 255, 255)),
+        )
+        .draw(&mut buffer);
 
         // draw buffer to screen
         let _ = buffer.blit(&mut gop);
