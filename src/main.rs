@@ -265,3 +265,8 @@ enum Hit {
     Left,
     Right,
 }
+
+enum GameState {
+    InGame,
+    PreGame
+}
