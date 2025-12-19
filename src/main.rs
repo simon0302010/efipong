@@ -67,6 +67,7 @@ fn game() -> Result {
     let mut buffer = Buffer::new(width, height);
 
     let mut running = true;
+    let mut in_game = false;
 
     // rng for ball direction after scoring
     let mut rng = Rng::new();
@@ -100,104 +101,109 @@ fn game() -> Result {
     };
 
     while running {
-        while let Ok(Some(key)) = system::with_stdin(|stdin| stdin.read_key()) {
-            match key {
-                Key::Printable(c) => {
-                    match char::try_from(c).ok().map(|ch| ch.to_ascii_lowercase()) {
-                        Some('q') => {
-                            running = false;
+        if in_game {
+            while let Ok(Some(key)) = system::with_stdin(|stdin| stdin.read_key()) {
+                match key {
+                    Key::Printable(c) => {
+                        match char::try_from(c).ok().map(|ch| ch.to_ascii_lowercase()) {
+                            Some('q') => {
+                                running = false;
+                            }
+                            Some('w') => {
+                                paddle_l.y = (paddle_l.y - PADDLE_SPEED)
+                                    .clamp(0.0, (height - PADDLE_HEIGHT) as f64);
+                            }
+                            Some('s') => {
+                                paddle_l.y = (paddle_l.y + PADDLE_SPEED)
+                                    .clamp(0.0, (height - PADDLE_HEIGHT) as f64);
+                            }
+                            _ => {}
                         }
-                        Some('w') => {
-                            paddle_l.y = (paddle_l.y - PADDLE_SPEED)
-                                .clamp(0.0, (height - PADDLE_HEIGHT) as f64);
-                        }
-                        Some('s') => {
-                            paddle_l.y = (paddle_l.y + PADDLE_SPEED)
-                                .clamp(0.0, (height - PADDLE_HEIGHT) as f64);
-                        }
-                        _ => {}
                     }
+                    Key::Special(ScanCode::UP) => {
+                        paddle_r.y =
+                            (paddle_r.y - PADDLE_SPEED).clamp(0.0, (height - PADDLE_HEIGHT) as f64);
+                    }
+                    Key::Special(ScanCode::DOWN) => {
+                        paddle_r.y =
+                            (paddle_r.y + PADDLE_SPEED).clamp(0.0, (height - PADDLE_HEIGHT) as f64);
+                    }
+                    _ => {}
                 }
-                Key::Special(ScanCode::UP) => {
-                    paddle_r.y =
-                        (paddle_r.y - PADDLE_SPEED).clamp(0.0, (height - PADDLE_HEIGHT) as f64);
-                }
-                Key::Special(ScanCode::DOWN) => {
-                    paddle_r.y =
-                        (paddle_r.y + PADDLE_SPEED).clamp(0.0, (height - PADDLE_HEIGHT) as f64);
-                }
-                _ => {}
             }
-        }
 
-        // moving
-        ball.x += ball.speed_x;
-        ball.y += ball.speed_y;
+            // moving
+            ball.x += ball.speed_x;
+            ball.y += ball.speed_y;
 
-        // when a "goal" is scored
-        if ball.x >= width as f64 - ball.size as f64 {
-            ball.x = (width / 2 - ball.size / 2) as f64;
-            ball.y = paddle_r.y + (paddle_r.height / 2) as f64 - (ball.size / 2) as f64;
-            ball.speed_x = BALL_START_SPEED;
-            ball.speed_y = rng.random_range(-BALL_START_SPEED, BALL_START_SPEED);
-            paddle_l.score += 1;
-        } else if ball.x <= 0.0 {
-            ball.x = (width / 2 - ball.size / 2) as f64;
-            ball.y = paddle_l.y + (paddle_l.height / 2) as f64 - (ball.size / 2) as f64;
-            ball.speed_x = -BALL_START_SPEED;
-            ball.speed_y = rng.random_range(-BALL_START_SPEED, BALL_START_SPEED);
-            paddle_r.score += 1;
-        }
+            // when a "goal" is scored
+            if ball.x >= width as f64 - ball.size as f64 {
+                ball.x = (width / 2 - ball.size / 2) as f64;
+                ball.y = paddle_r.y + (paddle_r.height / 2) as f64 - (ball.size / 2) as f64;
+                ball.speed_x = BALL_START_SPEED;
+                ball.speed_y = rng.random_range(-BALL_START_SPEED, BALL_START_SPEED);
+                paddle_l.score += 1;
+            } else if ball.x <= 0.0 {
+                ball.x = (width / 2 - ball.size / 2) as f64;
+                ball.y = paddle_l.y + (paddle_l.height / 2) as f64 - (ball.size / 2) as f64;
+                ball.speed_x = -BALL_START_SPEED;
+                ball.speed_y = rng.random_range(-BALL_START_SPEED, BALL_START_SPEED);
+                paddle_r.score += 1;
+            }
 
-        // Vertical collision detection and response
-        if ball.y >= height as f64 - ball.size as f64 {
-            ball.y = height as f64 - ball.size as f64;
-            ball.speed_y = -ball.speed_y;
-        } else if ball.y <= 0.0 {
-            ball.y = 0.0;
-            ball.speed_y = -ball.speed_y;
-        }
+            // Vertical collision detection and response
+            if ball.y >= height as f64 - ball.size as f64 {
+                ball.y = height as f64 - ball.size as f64;
+                ball.speed_y = -ball.speed_y;
+            } else if ball.y <= 0.0 {
+                ball.y = 0.0;
+                ball.speed_y = -ball.speed_y;
+            }
 
-        // handling ball paddle collisions
-        handle_paddle_hit(&mut ball, &paddle_r);
-        handle_paddle_hit(&mut ball, &paddle_l);
+            // handling ball paddle collisions
+            handle_paddle_hit(&mut ball, &paddle_r);
+            handle_paddle_hit(&mut ball, &paddle_l);
 
-        // clearing buffer
-        buffer.clear();
+            // clearing buffer
+            buffer.clear();
 
-        // rendering ball
-        buffer.rectangle(
-            ball.x as usize,
-            ball.y as usize,
-            ball.size,
-            ball.size,
-            WHITE,
-            true,
-        );
-
-        // rendering paddles
-        for paddle in vec![paddle_l, paddle_r] {
+            // rendering ball
             buffer.rectangle(
-                paddle.x as usize,
-                paddle.y as usize,
-                paddle.width,
-                paddle.height,
+                ball.x as usize,
+                ball.y as usize,
+                ball.size,
+                ball.size,
                 WHITE,
                 true,
             );
+
+            // rendering paddles
+            for paddle in vec![paddle_l, paddle_r] {
+                buffer.rectangle(
+                    paddle.x as usize,
+                    paddle.y as usize,
+                    paddle.width,
+                    paddle.height,
+                    WHITE,
+                    true,
+                );
+            }
+
+            let _ = Text::new(
+                format!("{} | {}", paddle_l.score, paddle_r.score).as_str(),
+                Point::new((width / 2 - 50) as i32, 20),
+                MonoTextStyle::new(&FONT_10X20, Rgb888::new(255, 255, 255)),
+            )
+            .draw(&mut buffer);
+
+            // draw buffer to screen
+            let _ = buffer.blit(&mut gop);
+
+            boot::stall(Duration::from_millis(10));
+        } else {
+            // will change
+            in_game = true;
         }
-
-        let _ = Text::new(
-            format!("{} | {}", paddle_l.score, paddle_r.score).as_str(),
-            Point::new((width / 2 - 50) as i32, 20),
-            MonoTextStyle::new(&FONT_10X20, Rgb888::new(255, 255, 255)),
-        )
-        .draw(&mut buffer);
-
-        // draw buffer to screen
-        let _ = buffer.blit(&mut gop);
-
-        boot::stall(Duration::from_millis(10));
     }
 
     Ok(())
@@ -264,9 +270,4 @@ fn handle_paddle_hit(ball: &mut Ball, paddle: &Paddle) {
 enum Hit {
     Left,
     Right,
-}
-
-enum GameState {
-    InGame,
-    PreGame
 }
