@@ -11,15 +11,16 @@ mod rand;
 
 use core::time::Duration;
 
+use alloc::string::{String, ToString};
 use alloc::{format, vec};
-use embedded_graphics::mono_font::MonoTextStyle;
 use embedded_graphics::mono_font::ascii::FONT_10X20;
+use embedded_graphics::mono_font::MonoTextStyle;
 use embedded_graphics::pixelcolor::Rgb888;
 use embedded_graphics::prelude::Point;
 use embedded_graphics::text::Text;
 use embedded_graphics::Drawable;
 use num_traits::float::FloatCore;
-use uefi::{prelude::*, println};
+use uefi::prelude::*;
 use uefi::proto::console::gop::{BltPixel, GraphicsOutput};
 use uefi::proto::console::text::{Key, ScanCode};
 use uefi::{boot, Result};
@@ -72,17 +73,7 @@ fn game() -> Result {
     // rng for ball direction after scoring
     let mut rng = Rng::new();
 
-    let mut ball = Ball {
-        x: ((width / 2) - (BALL_SIZE / 2)) as f64,
-        y: ((height / 2) - (BALL_SIZE / 2)) as f64,
-        speed_x: if rng.random_bool(0.5) {
-            BALL_START_SPEED
-        } else {
-            -BALL_START_SPEED
-        },
-        speed_y: 0.0,
-        size: 7,
-    };
+    let mut ball = get_default_ball(&width, &height, &mut rng);
 
     let mut paddle_r = Paddle {
         x: (width - PADDLE_WIDTH - PADDLE_DISTANCE_WALL) as f64,
@@ -151,6 +142,11 @@ fn game() -> Result {
                 paddle_r.score += 1;
             }
 
+            // stop game at 11 points
+            if paddle_l.score >= 11 || paddle_r.score >= 11 {
+                in_game = false;
+            }
+
             // Vertical collision detection and response
             if ball.y >= height as f64 - ball.size as f64 {
                 ball.y = height as f64 - ball.size as f64;
@@ -189,9 +185,13 @@ fn game() -> Result {
                 );
             }
 
+            let score_text = format!("{} | {}", paddle_l.score, paddle_r.score);
             let _ = Text::new(
-                format!("{} | {}", paddle_l.score, paddle_r.score).as_str(),
-                Point::new((width / 2 - 50) as i32, 20),
+                &score_text,
+                Point::new(
+                    ((width - (score_text.len() * 10)) / 2) as i32,
+                    20,
+                ),
                 MonoTextStyle::new(&FONT_10X20, Rgb888::new(255, 255, 255)),
             )
             .draw(&mut buffer);
@@ -201,8 +201,58 @@ fn game() -> Result {
 
             boot::stall(Duration::from_millis(10));
         } else {
-            // will change
-            in_game = true;
+            // restart if space is pressed.
+            while let Ok(Some(key)) = system::with_stdin(|stdin| stdin.read_key()) {
+                match key {
+                    Key::Printable(c) => {
+                        match char::try_from(c).ok().map(|ch| ch.to_ascii_lowercase()) {
+                            Some('q') => {
+                                running = false;
+                            }
+                            Some(' ') => {
+                                in_game = true;
+                                paddle_l.score = 0;
+                                paddle_r.score = 0;
+                                ball = get_default_ball(&width, &height, &mut rng);
+                            }
+                            _ => {}
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            buffer.clear();
+
+            let final_text: String;
+
+            // decide which text to display based on scores
+            if paddle_l.score >= 11 {
+                final_text = format!(
+                    "Left won by {} points. Press space to restart.",
+                    paddle_l.score - paddle_r.score
+                );
+            } else if paddle_r.score >= 11 {
+                final_text = format!(
+                    "Right won by {} points. Press space to restart.",
+                    paddle_r.score - paddle_l.score
+                );
+            } else {
+                final_text = "Press space to start the game.".to_string();
+            }
+
+            // create text
+            let _ = Text::new(
+                &final_text,
+                Point::new(
+                    ((width - (final_text.len() * 10)) / 2) as i32,
+                    ((height - 20) / 2) as i32,
+                ),
+                MonoTextStyle::new(&FONT_10X20, Rgb888::new(255, 255, 255)),
+            )
+            .draw(&mut buffer);
+
+            let _ = buffer.blit(&mut gop);
         }
     }
 
@@ -264,6 +314,20 @@ fn handle_paddle_hit(ball: &mut Ball, paddle: &Paddle) {
             }
         }
         ball.speed_y = ball_speed * sin(BOUNCE_ANGLE * hit_y);
+    }
+}
+
+fn get_default_ball(width: &usize, height: &usize, rng: &mut Rng) -> Ball {
+    Ball {
+        x: ((width / 2) - (BALL_SIZE / 2)) as f64,
+        y: ((height / 2) - (BALL_SIZE / 2)) as f64,
+        speed_x: if rng.random_bool(0.5) {
+            BALL_START_SPEED
+        } else {
+            -BALL_START_SPEED
+        },
+        speed_y: 0.0,
+        size: 7,
     }
 }
 
