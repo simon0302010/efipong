@@ -9,6 +9,7 @@ mod buffer;
 mod misc;
 mod rand;
 
+use core::arch::x86_64::_rdtsc;
 use core::time::Duration;
 
 use alloc::string::{String, ToString};
@@ -50,12 +51,12 @@ struct Paddle {
 }
 
 const BALL_SIZE: usize = 7;
-const BALL_START_SPEED: f64 = 3.0;
-const MAX_BALL_SPEED: f64 = 7.0;
+const BALL_START_SPEED: f64 = 300.0;
+const MAX_BALL_SPEED: f64 = 800.0;
 const PADDLE_HEIGHT: usize = 80;
 const PADDLE_WIDTH: usize = 6;
 const PADDLE_SPEED: f64 = 40.0;
-const PADDLE_DISTANCE_WALL: usize = 30;
+const PADDLE_DISTANCE_WALL: usize = 40;
 const BOUNCE_ANGLE: f64 = 5.0 * core::f64::consts::PI / 12.0;
 
 const WHITE: BltPixel = BltPixel::new(255, 255, 255);
@@ -91,7 +92,21 @@ fn game() -> Result {
         score: 0,
     };
 
+    // estimate cpu frequency
+    let tsc_start = unsafe { _rdtsc() };
+    boot::stall(Duration::from_millis(100));
+    let tsc_end = unsafe { _rdtsc() };
+    let ticks_per_second = (tsc_end - tsc_start) * 10; // 100ms * 10 = 1 second
+
+    let mut last_tsc = unsafe { _rdtsc() };
+
     while running {
+        // calculate delta time
+        let current_tsc = unsafe { _rdtsc() };
+        let delta_ticks = current_tsc.saturating_sub(last_tsc);
+        last_tsc = current_tsc;
+        let delta = (delta_ticks as f64) / (ticks_per_second as f64); // delta in seconds
+
         if in_game {
             while let Ok(Some(key)) = system::with_stdin(|stdin| stdin.read_key()) {
                 match key {
@@ -123,9 +138,9 @@ fn game() -> Result {
                 }
             }
 
-            // moving
-            ball.x += ball.speed_x;
-            ball.y += ball.speed_y;
+            // moving - scale by delta time (in seconds)
+            ball.x += ball.speed_x * delta;
+            ball.y += ball.speed_y * delta;
 
             // when a "goal" is scored
             if ball.x >= width as f64 - ball.size as f64 {
@@ -157,8 +172,8 @@ fn game() -> Result {
             }
 
             // handling ball paddle collisions
-            handle_paddle_hit(&mut ball, &paddle_r);
-            handle_paddle_hit(&mut ball, &paddle_l);
+            handle_paddle_hit(&mut ball, &paddle_r, &width);
+            handle_paddle_hit(&mut ball, &paddle_l, &width);
 
             // clearing buffer
             buffer.clear();
@@ -266,7 +281,15 @@ fn main() -> Status {
     Status::SUCCESS
 }
 
-fn handle_paddle_hit(ball: &mut Ball, paddle: &Paddle) {
+fn handle_paddle_hit(ball: &mut Ball, paddle: &Paddle, width: &usize) {
+    let is_left_paddle = paddle.x < *width as f64 / 2.0;
+    
+    let paddle_x = if is_left_paddle {
+        0
+    } else {
+        paddle.x as usize
+    };
+
     if rectangles_overlapping(
         Rectangle {
             x: ball.x as usize,
@@ -275,25 +298,26 @@ fn handle_paddle_hit(ball: &mut Ball, paddle: &Paddle) {
             height: ball.size,
         },
         Rectangle {
-            x: paddle.x as usize,
+            x: paddle_x,
             y: paddle.y as usize,
-            width: paddle.width,
+            width: paddle.width + PADDLE_DISTANCE_WALL,
             height: paddle.height,
         },
     ) {
-        // inversing direction
-        ball.speed_x = -ball.speed_x;
-        // snap to paddle
-        let hit: Hit;
-
-        if ball.x > paddle.x {
-            // left paddle
-            ball.x = paddle.x + paddle.width as f64;
-            hit = Hit::Left;
+        let hit = if is_left_paddle {
+            Hit::Left
         } else {
-            // right paddle
-            ball.x = paddle.x - ball.size as f64;
-            hit = Hit::Right;
+            Hit::Right
+        };
+
+        // snap ball to paddle
+        match hit {
+            Hit::Left => {
+                ball.x = paddle.x + paddle.width as f64;
+            }
+            Hit::Right => {
+                ball.x = paddle.x - ball.size as f64;
+            }
         }
 
         let paddle_center = paddle.y + (paddle.height as f64 / 2.0);
@@ -301,7 +325,6 @@ fn handle_paddle_hit(ball: &mut Ball, paddle: &Paddle) {
         let hit_y = ((ball_center - paddle_center) / (paddle.height as f64 / 2.0)).clamp(-1.0, 1.0);
 
         // calculate new direction and speed
-        // Increase ball speed by 5% each hit, cap at 7.0
         let mut ball_speed = sqrt(ball.speed_x.powi(2) + ball.speed_y.powi(2));
         ball_speed = (ball_speed * 1.1).min(MAX_BALL_SPEED);
 
@@ -310,7 +333,7 @@ fn handle_paddle_hit(ball: &mut Ball, paddle: &Paddle) {
                 ball.speed_x = -ball_speed * cos(BOUNCE_ANGLE * hit_y);
             }
             Hit::Left => {
-                ball.speed_x = -(-ball_speed * cos(BOUNCE_ANGLE * hit_y));
+                ball.speed_x = ball_speed * cos(BOUNCE_ANGLE * hit_y);
             }
         }
         ball.speed_y = ball_speed * sin(BOUNCE_ANGLE * hit_y);
