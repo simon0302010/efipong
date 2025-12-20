@@ -1,6 +1,7 @@
 # Efipong
 
 Efipong is a pong game running entirely in UEFI. This means that it doesn't even require an operating system to run. It can be installed onto any USB drive and booted directly from there.
+Currently, it supports x86_64 and i686 UEFI targets.
 
 ## Installation
 
@@ -24,17 +25,13 @@ For x86_64 target, use:
 cargo build --target x86_64-unknown-uefi --release
 ```
 
-For aarch64 target, use:
-
-```bash
-cargo build --target aarch64-unknown-uefi --release
-```
-
 For 32-bit x86 target, use:
 
 ```bash
 cargo build --target i686-unknown-uefi --release
 ```
+
+> ⚠️ ARM UEFI targets are not yet supported.
 
 You should now have the binary located at `target/<target>/release/efipong.efi`.
 
@@ -42,7 +39,7 @@ You should now have the binary located at `target/<target>/release/efipong.efi`.
 
 1. Format a USB drive to FAT32.
 2. Create a directory structure on the USB drive as follows: `EFI/BOOT/`.
-3. Copy the built `efipong.efi` file to the `EFI/BOOT/` directory and rename it to `BOOTX64.EFI` for x86_64, `BOOTAA64.EFI` for aarch64, or `BOOTIA32.EFI` for i686.
+3. Copy the built `efipong.efi` file to the `EFI/BOOT/` directory and rename it to `BOOTX64.EFI` for x86_64 or `BOOTIA32.EFI` for i686.
 
 ## Running
 

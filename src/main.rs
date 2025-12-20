@@ -9,8 +9,14 @@ mod buffer;
 mod misc;
 mod rand;
 
-use core::arch::x86_64::_rdtsc;
+
 use core::time::Duration;
+
+#[cfg(target_arch = "x86_64")]
+use core::arch::x86_64::_rdtsc;
+
+#[cfg(target_arch = "x86")]
+use core::arch::x86::_rdtsc;
 
 use alloc::string::{String, ToString};
 use alloc::{format, vec};
